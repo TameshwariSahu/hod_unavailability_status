@@ -1,0 +1,26 @@
+[
+  {
+    "name": "Dr. Anjali Sharma",
+    "department": "Human Resources",
+    "status": "leave",
+    "fromDate": "2026-09-03",
+    "toDate": "2026-09-05",
+    "purpose": "Personal leave"
+  },
+  {
+    "name": "Mr. R. K. Verma",
+    "department": "Operations",
+    "status": "tour",
+    "fromDate": "2026-09-08",
+    "toDate": "2026-09-10",
+    "purpose": "Site inspection at Bacheli Complex"
+  },
+  {
+    "name": "Ms. Priya Nair",
+    "department": "Finance",
+    "status": "leave",
+    "fromDate": "2026-09-15",
+    "toDate": "2026-09-16",
+    "purpose": "Medical leave"
+  }
+]
