@@ -79,6 +79,29 @@
 .brand { font-size: 22px; color: #fff; }
 .brand b { color: var(--sidebar-brand); }
 
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.menu-toggle {
+  display: none;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  border: 1px solid #31506d;
+  background: transparent;
+  color: #fff;
+  font-size: 19px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.nav-backdrop { display: none; }
+
 .app aside > small { margin: 6px 0 30px; }
 
 .app nav { display: grid; gap: 6px; }
@@ -406,19 +429,43 @@ textarea {
   }
   .app aside > small { display: none; }
 
-  /* Nav becomes a horizontally-scrollable tab strip with real touch targets */
-  .app nav {
-    display: flex;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    margin-top: 14px;
-    gap: 6px;
-    scrollbar-width: none;
+  .menu-toggle { display: inline-flex; align-items: center; justify-content: center; }
+
+  .nav-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(6, 12, 24, 0.5);
+    z-index: 40;
   }
-  .app nav::-webkit-scrollbar { display: none; }
+
+  /* Nav is collapsed by default — only Dashboard's content shows until the
+     hamburger is tapped, which opens the full list as a floating dropdown. */
+  .app nav {
+    display: none;
+  }
+  .app nav.open {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    position: fixed;
+    top: 66px;
+    left: 12px;
+    right: 12px;
+    background: var(--sidebar-bg);
+    border: 1px solid #31506d;
+    border-radius: 12px;
+    padding: 8px;
+    box-shadow: 0 16px 34px rgba(0, 0, 0, .4);
+    z-index: 50;
+    max-height: calc(100vh - 90px);
+    overflow-y: auto;
+    margin-top: 0;
+  }
   .app nav button {
-    white-space: nowrap;
-    padding: 11px 14px;
+    white-space: normal;
+    text-align: left;
+    padding: 12px 14px;
     min-height: 44px;
     border-radius: 8px;
   }

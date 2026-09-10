@@ -47,11 +47,18 @@ export default function App() {
   const [reportTo, setReportTo] = useState('')
   const [reportPage, setReportPage] = useState(1)
   const REPORT_PAGE_SIZE = 10
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
     localStorage.setItem('hod_theme', theme)
   }, [theme])
+
+  useEffect(() => {
+    const onKey = e => { if (e.key === 'Escape') setMobileNavOpen(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   const toggleTheme = () => setTheme(theme === 'dark' ? 'light' : 'dark')
 
@@ -302,11 +309,26 @@ export default function App() {
   return (
     <div className="app">
       <aside>
-        <div className="brand"><b>HOD</b> Availability</div>
+        <div className="topbar">
+          <div className="brand"><b>HOD</b> Availability</div>
+          <button
+            className="menu-toggle"
+            onClick={() => setMobileNavOpen(o => !o)}
+            aria-label="Toggle menu"
+            aria-expanded={mobileNavOpen}
+          >
+            ☰
+          </button>
+        </div>
         <small>Management System</small>
-        <nav>
+        {mobileNavOpen && <div className="nav-backdrop" onClick={() => setMobileNavOpen(false)} />}
+        <nav className={mobileNavOpen ? 'open' : ''}>
           {nav.map(n => (
-            <button key={n} className={page === n ? 'active' : ''} onClick={() => setPage(n)}>
+            <button
+              key={n}
+              className={page === n ? 'active' : ''}
+              onClick={() => { setPage(n); setMobileNavOpen(false) }}
+            >
               {n}
             </button>
           ))}
