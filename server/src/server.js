@@ -7,7 +7,8 @@ import { pool } from './db.js'
 import { requireAuth, requireAdmin } from './middleware.js'
 
 const app = express()
-app.use(cors({ origin: `${process.env.FRONTEND_URL}` }))
+// app.use(cors({ origin: `${process.env.FRONTEND_URL}` }))
+ app.use(cors({ origin: ['http://localhost:5173', `${process.env.FRONTEND_URL}`] }))
 app.use(express.json())
 const asyncRoute = fn => (req,res,next) => Promise.resolve(fn(req,res,next)).catch(next)
 const allowedReasons = [

@@ -225,6 +225,26 @@ header p,
   font-size: 13px;
   min-width: 150px;
 }
+.date-field {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.date-field input { font-size: 13px; padding: 8px 9px; }
+.filterbar-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.primary.small {
+  padding: 8px 12px;
+  font-size: 12.5px;
+}
 .clear-btn {
   border: 1px solid var(--border);
   background: var(--surface);
@@ -245,6 +265,9 @@ header p,
 
 /* ===== Tables ===== */
 .tablewrap { overflow: auto; }
+
+/* Calendar tooltip floats above cells — don't let the scroll wrapper clip it */
+.calendar .tablewrap { overflow: visible; }
 
 table {
   width: 100%;
@@ -275,6 +298,19 @@ td.empty {
   color: var(--muted);
   padding: 26px;
   font-style: italic;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 18px;
+}
+.page-info {
+  font-size: 12.5px;
+  color: var(--muted);
+  font-weight: 600;
 }
 
 /* ===== Status pills ===== */
@@ -368,10 +404,9 @@ textarea {
   }
   .two { grid-template-columns: 1fr; }
   .calhead { flex-direction: column; align-items: flex-start; }
-  .caltable { border-spacing: 3px; }
   .caltable thead th { font-size: 10px; }
-  .caltable tbody td { height: 52px; }
-  .calcell { padding: 5px 6px; border-radius: 7px; }
+  .caltable tbody td { height: 60px; }
+  .calcell { padding: 4px 5px; }
   .calnum { font-size: 11px; }
   .calcell.today .calnum {
     min-width: 18px;
@@ -410,6 +445,36 @@ textarea {
   letter-spacing: -0.01em;
 }
 
+.calselects {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 4px;
+}
+
+.calmonth,
+.calyear {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--heading);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 9px;
+  border-radius: 7px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.calmonth:hover,
+.calyear:hover { border-color: var(--accent); }
+.calmonth:focus,
+.calyear:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.caldept {
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 12.5px;
+}
+
 .calnav {
   width: 36px;
   height: 36px;
@@ -422,10 +487,14 @@ textarea {
   cursor: pointer;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
-.calnav:hover {
+.calnav:hover:not(:disabled) {
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
+}
+.calnav:disabled {
+  opacity: .4;
+  cursor: not-allowed;
 }
 
 .caltoday {
@@ -479,37 +548,114 @@ textarea {
 
 .caltable {
   width: 100%;
-  border-collapse: separate;
-  border-spacing: 7px;
+  table-layout: fixed;
+  border-collapse: collapse;
+  border: 1px solid var(--border);
 }
 .caltable thead th {
-  padding: 6px 0 10px;
+  width: calc(100% / 7);
+  padding: 11px 0;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--muted-2);
-  background: transparent;
-  border: 0;
+  color: var(--heading);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
   font-weight: 700;
-  white-space: normal;
 }
 .caltable tbody td {
   width: calc(100% / 7);
-  height: 84px;
-  border: 0;
-  padding: 0;
+  height: 96px;
+  border: 1px solid var(--border);
+  padding: 7px 8px;
   vertical-align: top;
+}
+
+.calblank {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
 }
 
 .calcell {
   background: var(--surface);
-  border: 1px solid var(--border-soft);
-  border-radius: 10px;
-  padding: 8px 9px;
   position: relative;
-  transition: box-shadow 0.15s, border-color 0.15s, transform 0.05s;
+  transition: box-shadow 0.15s, background 0.15s, transform 0.05s;
 }
-.calcell:hover { box-shadow: 0 4px 14px var(--shadow); }
+.calcell:hover { box-shadow: inset 0 0 0 2px var(--accent); }
+.calcell:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Hovered cell needs to paint above neighbouring rows/cells so the tooltip
+   (which opens upward, over the previous week's row) is never hidden. */
+.calcell.selected { z-index: 40; }
+
+.caltooltip {
+  position: absolute;
+  z-index: 60;
+  bottom: calc(100% + 8px);
+  top: auto;
+  left: 0;
+  min-width: 240px;
+  max-width: 300px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px var(--shadow);
+  padding: 10px 12px;
+  text-align: left;
+  white-space: normal;
+  pointer-events: none;
+}
+/* Small caret so it's obvious which day the tooltip belongs to. */
+.caltooltip::after {
+  content: '';
+  position: absolute;
+  left: 16px;
+  top: 100%;
+  margin-top: -6px;
+  width: 10px;
+  height: 10px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  transform: rotate(45deg);
+}
+/* Only used for the first calendar row, where there's no room above to open into. */
+.caltooltip.below {
+  top: calc(100% + 8px);
+  bottom: auto;
+}
+.caltooltip.below::after {
+  top: auto;
+  bottom: 100%;
+  margin-top: 0;
+  margin-bottom: -6px;
+  border-right: none;
+  border-bottom: none;
+  border-left: 1px solid var(--border);
+  border-top: 1px solid var(--border);
+}
+.caltooltip-head {
+  font-size: 12px;
+  color: var(--heading);
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.caltooltip-item {
+  display: grid;
+  gap: 2px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+.caltooltip-item:last-child { border-bottom: 0; }
+.caltooltip-item strong { font-size: 13px; color: var(--heading); }
+.caltooltip-reason { font-size: 12px; color: var(--unavailable-text); font-weight: 600; }
+.caltooltip-dates { font-size: 11.5px; color: var(--muted); }
+.caltooltip-alt { font-size: 11.5px; color: var(--muted-2); }
+.caltooltip p { margin: 0; color: var(--muted); font-size: 12px; }
 
 .calnum {
   display: inline-block;
@@ -574,7 +720,20 @@ textarea {
   margin-bottom: 10px;
 }
 .coldetail-head b { font-size: 14px; color: var(--heading); }
-.coldetail-head .close { width: 28px; height: 28px; font-size: 17px; }
+.coldetail-head .close {
+  width: 28px;
+  height: 28px;
+  font-size: 17px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 50%;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: background 0.15s, color 0.15s;
+}
+.coldetail-head .close:hover { background: var(--surface-2); color: var(--heading); }
 .coldetail p { margin: 0; color: var(--muted); font-size: 13.5px; }
 
 .coldetail-item {

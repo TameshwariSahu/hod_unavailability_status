@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 import './app.css'
 import { api } from './api'
+import * as XLSX from 'xlsx'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
 
 const starterDepartments = [
   { id: 1, name: 'Information Technology' },
@@ -37,6 +40,11 @@ export default function App() {
   const [filterDept, setFilterDept] = useState('')
   const [sortKey, setSortKey] = useState('reason')
   const [sortDir, setSortDir] = useState('asc')
+  const [reportDept, setReportDept] = useState('')
+  const [reportFrom, setReportFrom] = useState('')
+  const [reportTo, setReportTo] = useState('')
+  const [reportPage, setReportPage] = useState(1)
+  const REPORT_PAGE_SIZE = 10
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
@@ -83,6 +91,79 @@ export default function App() {
   const hasFilter = filterHod || filterReason || filterDept
   const clearFilters = () => { setFilterHod(''); setFilterReason(''); setFilterDept('') }
 
+  // Reports: filter by department + period, newest first, paginated 10/page.
+  const reportRecords = records
+    .filter(r => {
+      if (reportDept) {
+        const h = hods.find(x => x.id === r.hod)
+        if (!h || h.department !== Number(reportDept)) return false
+      }
+      // Period filter: keep any record whose range overlaps the selected window.
+      if (reportFrom && new Date(r.to) < new Date(`${reportFrom}T00:00:00`)) return false
+      if (reportTo && new Date(r.from) > new Date(`${reportTo}T23:59:59`)) return false
+      return true
+    })
+    .sort((a, b) => new Date(b.from) - new Date(a.from))
+
+  const hasReportFilter = reportDept || reportFrom || reportTo
+  const clearReportFilters = () => { setReportDept(''); setReportFrom(''); setReportTo(''); setReportPage(1) }
+
+  const reportTotalPages = Math.max(1, Math.ceil(reportRecords.length / REPORT_PAGE_SIZE))
+  const reportPageSafe = Math.min(reportPage, reportTotalPages)
+  const reportPageRecords = reportRecords.slice(
+    (reportPageSafe - 1) * REPORT_PAGE_SIZE,
+    reportPageSafe * REPORT_PAGE_SIZE
+  )
+
+  // Exports always cover the full filtered set, not just the current page.
+  const reportExportRows = () => reportRecords.map(r => {
+    const h = hods.find(x => x.id === r.hod)
+    return {
+      hod: hname(r.hod),
+      department: dname(h?.department),
+      reason: r.reason === 'OTHER' && r.remarks ? r.remarks : r.reason,
+      from: new Date(r.from).toLocaleDateString('en-IN'),
+      to: new Date(r.to).toLocaleDateString('en-IN'),
+      status: r.status,
+      alternate: r.alternate ? hname(r.alternate) : '',
+      remarks: r.remarks || '',
+    }
+  })
+
+  const exportReportExcel = () => {
+    const rows = reportExportRows().map(x => ({
+      'HOD': x.hod,
+      'Department': x.department,
+      'Reason': x.reason,
+      'From': x.from,
+      'To': x.to,
+      'Status': x.status,
+      'Alternate HOD': x.alternate,
+      'Remarks': x.remarks,
+    }))
+    const ws = XLSX.utils.json_to_sheet(rows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Availability Report')
+    XLSX.writeFile(wb, `hod-availability-report-${new Date().toISOString().slice(0, 10)}.xlsx`)
+  }
+
+  const exportReportPDF = () => {
+    const doc = new jsPDF()
+    doc.setFontSize(14)
+    doc.text('HOD Availability Report', 14, 16)
+    doc.setFontSize(9)
+    doc.setTextColor(120)
+    doc.text(`Generated ${new Date().toLocaleString('en-IN')}`, 14, 22)
+    autoTable(doc, {
+      startY: 28,
+      head: [['HOD', 'Department', 'Reason', 'From', 'To', 'Status']],
+      body: reportExportRows().map(x => [x.hod, x.department, x.reason, x.from, x.to, x.status]),
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [23, 105, 170] },
+    })
+    doc.save(`hod-availability-report-${new Date().toISOString().slice(0, 10)}.pdf`)
+  }
+
   const loadData = async () => {
     try {
       const [dbDepts, dbHods, dbRecords] = await Promise.all([
@@ -95,7 +176,7 @@ export default function App() {
       setRecords(dbRecords.map(x => ({
         id: Number(x.id),
         hod: Number(x.hod_id),
-        reason: x.reason.replace('_', ' '),
+        reason: x.reason.replace(/_/g, ' '),
         from: x.from_datetime,
         to: x.to_datetime,
         alternate: x.alternate_hod_id ? Number(x.alternate_hod_id) : '',
@@ -148,7 +229,7 @@ export default function App() {
       await api.createStatus({
         hod_id: Number(recordForm.hod),
         availability_status: 'UNAVAILABLE',
-        reason: recordForm.reason.replace(' ', '_'),
+        reason: recordForm.reason.replace(/ /g, '_'),
         from_datetime: fromStr,
         to_datetime: toStr,
         remarks: recordForm.remarks,
@@ -428,7 +509,7 @@ export default function App() {
         )}
 
         {page === 'Calendar' && (
-          <Calendar records={records} hname={hname} />
+          <Calendar records={records} hods={hods} hname={hname} dname={dname} />
         )}
 
         {page === 'Users' && (
@@ -495,7 +576,54 @@ export default function App() {
 
         {page === 'Reports' && (
           <Panel title="Availability history">
-            <Records records={records} hods={hods} hname={hname} dname={dname} />
+            <div className="filterbar">
+              <select value={reportDept} onChange={e => { setReportDept(e.target.value); setReportPage(1) }}>
+                <option value="">All departments</option>
+                {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+              <div className="date-field">
+                <span>From</span>
+                <input type="date" value={reportFrom} onChange={e => { setReportFrom(e.target.value); setReportPage(1) }} />
+              </div>
+              <div className="date-field">
+                <span>To</span>
+                <input type="date" value={reportTo} onChange={e => { setReportTo(e.target.value); setReportPage(1) }} />
+              </div>
+              {hasReportFilter && (
+                <button className="clear-btn" onClick={clearReportFilters}>Clear filters</button>
+              )}
+              <div className="filterbar-actions">
+                <span className="filter-count">{reportRecords.length} record{reportRecords.length === 1 ? '' : 's'}</span>
+                <button className="primary small" onClick={exportReportExcel} disabled={reportRecords.length === 0}>
+                  Download Excel
+                </button>
+                <button className="primary small" onClick={exportReportPDF} disabled={reportRecords.length === 0}>
+                  Download PDF
+                </button>
+              </div>
+            </div>
+
+            <Records records={reportPageRecords} hods={hods} hname={hname} dname={dname} />
+
+            {reportRecords.length > 0 && (
+              <div className="pagination">
+                <button
+                  className="calnav"
+                  onClick={() => setReportPage(p => Math.max(1, p - 1))}
+                  disabled={reportPageSafe === 1}
+                  aria-label="Previous page"
+                >‹</button>
+                <span className="page-info">
+                  Page {reportPageSafe} of {reportTotalPages} · showing {reportPageRecords.length} of {reportRecords.length}
+                </span>
+                <button
+                  className="calnav"
+                  onClick={() => setReportPage(p => Math.min(reportTotalPages, p + 1))}
+                  disabled={reportPageSafe === reportTotalPages}
+                  aria-label="Next page"
+                >›</button>
+              </div>
+            )}
           </Panel>
         )}
       </main>
@@ -577,11 +705,13 @@ function Panel({ title, children }) {
   )
 }
 
-function Calendar({ records, hname }) {
+function Calendar({ records, hods, hname, dname }) {
   const [cursor, setCursor] = useState(() => { const n = new Date(); return { y: n.getFullYear(), m: n.getMonth() } })
-  const [selected, setSelected] = useState(null)
-
-  const monthLabel = cursor.m.toLocaleString('en-IN', { month: 'long' })
+  const [hovered, setHovered] = useState(null)
+  // Separate from `hovered` (mouse-only): this drives a persistent detail
+  // panel so touch and keyboard users — who can't trigger :hover — can still
+  // see who's unavailable on a given day.
+  const [selectedDay, setSelectedDay] = useState(null)
 
   // Map each day of the visible month to the unavailability records falling on it
   const dayMap = {}
@@ -598,33 +728,66 @@ function Calendar({ records, hname }) {
   const daysInMonth = new Date(cursor.y, cursor.m + 1, 0).getDate()
   const today = new Date()
 
-  const cells = []
-  for (let i = 0; i < firstWeekday; i++) cells.push(<td key={'blank-' + i} />)
+  // Build weeks: each week is an array of 7 slots, null = empty cell before/after month
+  const weeks = []
+  let week = []
+  for (let i = 0; i < firstWeekday; i++) week.push(null)
   for (let day = 1; day <= daysInMonth; day++) {
     const recs = dayMap[cursor.y + '-' + cursor.m + '-' + day] || []
     const isToday = today.getFullYear() === cursor.y && today.getMonth() === cursor.m && today.getDate() === day
-    cells.push(
-      <td key={day} className={'calcell' + (recs.length ? ' unavailable' : '') + (isToday ? ' today' : '') + (selected === day ? ' selected' : '')} onClick={() => setSelected(selected === day ? null : day)}>
-        <span className="calnum">{day}</span>
-        {recs.length > 0 && <span className="calflag">{recs.length} unavailable</span>}
-      </td>
-    )
+    week.push({ day, recs, isToday })
+    if (week.length === 7) { weeks.push(week); week = [] }
+  }
+  if (week.length) {
+    while (week.length < 7) week.push(null)
+    weeks.push(week)
   }
 
   const move = delta => {
     const d = new Date(cursor.y, cursor.m + delta, 1)
     setCursor({ y: d.getFullYear(), m: d.getMonth() })
-    setSelected(null)
+    setHovered(null)
+    setSelectedDay(null)
   }
+
+  const jumpTo = (y, m) => { setCursor({ y, m }); setHovered(null); setSelectedDay(null) }
+
+  const toggleSelectedDay = day => setSelectedDay(d => (d === day ? null : day))
+
+  const monthOptions = Array.from({ length: 12 }, (_, i) => ({
+    value: String(i),
+    label: new Date(2000, i, 1).toLocaleString('en-IN', { month: 'long' }),
+  }))
+  const baseYear = today.getFullYear()
+  const yearOptions = Array.from({ length: 7 }, (_, i) => baseYear - 3 + i)
+
+  const isCurrentMonth = cursor.y === today.getFullYear() && cursor.m === today.getMonth()
 
   return (
     <section className="panel calendar">
       <div className="calhead">
         <div className="caltabs">
           <button className="calnav" onClick={() => move(-1)} aria-label="Previous month">‹</button>
-          <h2>{monthLabel} {cursor.y}</h2>
+          <div className="calselects">
+            <select
+              className="calmonth"
+              value={String(cursor.m)}
+              onChange={e => jumpTo(cursor.y, Number(e.target.value))}
+              aria-label="Select month"
+            >
+              {monthOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+            <select
+              className="calyear"
+              value={String(cursor.y)}
+              onChange={e => jumpTo(Number(e.target.value), cursor.m)}
+              aria-label="Select year"
+            >
+              {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
           <button className="calnav" onClick={() => move(1)} aria-label="Next month">›</button>
-          <button className="caltoday" onClick={() => { setCursor({ y: today.getFullYear(), m: today.getMonth() }); setSelected(null) }}>Today</button>
+          <button className="caltoday" disabled={isCurrentMonth} onClick={() => jumpTo(today.getFullYear(), today.getMonth())}>Today</button>
         </div>
         <div className="callegend">
           <span className="calkey unavailable"><i /> Unavailable</span>
@@ -632,40 +795,94 @@ function Calendar({ records, hname }) {
           <span className="calkey today"><i /> Today</span>
         </div>
       </div>
-      <p className="calhint">Red days mark at least one HOD unavailable. Click any red day to see who and why.</p>
+      <p className="calhint">Red days mark at least one HOD unavailable. Hover, tap, or focus and press Enter on a red day to see who and why.</p>
       <div className="tablewrap">
         <table className="caltable">
           <thead>
             <tr>{['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(w => <th key={w}>{w}</th>)}</tr>
           </thead>
           <tbody>
-            <tr>{cells}</tr>
+            {weeks.map((week, wi) => (
+              <tr key={wi}>
+                {week.map((cell, ci) => {
+                  // Tooltip opens upward by default so it's never clipped by the
+                  // bottom of the page. Only the first row has no room above it
+                  // (it would cover the calendar header), so that row flips down.
+                  const flipBelow = wi === 0
+                  const isInteractive = cell && cell.recs.length > 0
+                  const isActive = cell && (hovered === cell.day || selectedDay === cell.day)
+                  return (
+                    <td
+                      key={ci}
+                      className={cell ? 'calcell' + (cell.recs.length ? ' unavailable' : '') + (cell.isToday ? ' today' : '') + (isActive ? ' selected' : '') : 'calblank'}
+                      onMouseEnter={cell ? () => setHovered(cell.day) : undefined}
+                      onMouseLeave={() => setHovered(null)}
+                      onClick={isInteractive ? () => toggleSelectedDay(cell.day) : undefined}
+                      onKeyDown={isInteractive ? e => {
+                        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSelectedDay(cell.day) }
+                      } : undefined}
+                      tabIndex={isInteractive ? 0 : undefined}
+                      role={isInteractive ? 'button' : undefined}
+                      aria-pressed={isInteractive ? selectedDay === cell.day : undefined}
+                      aria-label={isInteractive ? `${cell.recs.length} HOD${cell.recs.length > 1 ? 's' : ''} unavailable on day ${cell.day}` : undefined}
+                    >
+                      {cell && <span className="calnum">{cell.day}</span>}
+                      {cell && cell.recs.length > 0 && <span className="calflag">{cell.recs.length} unavailable</span>}
+                      {cell && cell.recs.length > 0 && hovered === cell.day && (() => {
+                        const recs = cell.recs
+                        return (
+                          <div className={'caltooltip' + (flipBelow ? ' below' : '')}>
+                            <div className="caltooltip-head">
+                              <b>{new Date(cursor.y, cursor.m, cell.day).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}</b>
+                            </div>
+                            {recs.map(r => {
+                              const h = hods.find(x => x.id === r.hod)
+                              return (
+                                <div key={r.id} className="caltooltip-item">
+                                  <strong>{hname(r.hod)} <span className="caldept">({dname(h?.department)})</span></strong>
+                                  <span className="caltooltip-reason">{r.reason === 'OTHER' && r.remarks ? r.remarks : r.reason}</span>
+                                  <span className="caltooltip-dates">{new Date(r.from).toLocaleDateString('en-IN')} – {new Date(r.to).toLocaleDateString('en-IN')}</span>
+                                  {r.alternate ? <span className="caltooltip-alt">Alt: {hname(r.alternate)} ({dname(hods.find(x => x.id === r.alternate)?.department)})</span> : null}
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )
+                      })()}
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
 
-      {selected !== null && (() => {
-        const recs = dayMap[cursor.y + '-' + cursor.m + '-' + selected] || []
+      {selectedDay && (() => {
+        const recs = dayMap[cursor.y + '-' + cursor.m + '-' + selectedDay] || []
+        if (recs.length === 0) return null
+        const label = new Date(cursor.y, cursor.m, selectedDay).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })
         return (
           <div className="coldetail">
             <div className="coldetail-head">
-              <b>{new Date(cursor.y, cursor.m, selected).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</b>
-              <button className="calnav close" onClick={() => setSelected(null)} aria-label="Close">×</button>
+              <b>{label} — {recs.length} unavailable</b>
+              <button type="button" className="close" onClick={() => setSelectedDay(null)} aria-label="Close">×</button>
             </div>
-            {recs.length === 0
-              ? <p>No unavailability recorded for this day.</p>
-              : recs.map(r => (
+            {recs.map(r => {
+              const h = hods.find(x => x.id === r.hod)
+              return (
                 <div key={r.id} className="coldetail-item">
                   <div className="coldetail-main">
-                    <strong>{hname(r.hod)}</strong>
+                    <strong>{hname(r.hod)} <span className="caldept">({dname(h?.department)})</span></strong>
                     <span>{r.reason === 'OTHER' && r.remarks ? r.remarks : r.reason}</span>
+                    {r.alternate ? <div className="calalt">Alt: {hname(r.alternate)} ({dname(hods.find(x => x.id === r.alternate)?.department)})</div> : null}
                   </div>
                   <div className="coldetail-meta">
                     {new Date(r.from).toLocaleDateString('en-IN')} – {new Date(r.to).toLocaleDateString('en-IN')}
-                    {r.alternate ? <div className="calalt">Alternate: {hname(r.alternate)}</div> : null}
                   </div>
                 </div>
-              ))}
+              )
+            })}
           </div>
         )
       })()}
