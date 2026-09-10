@@ -105,6 +105,7 @@
 .app aside > small { margin: 6px 0 30px; }
 
 .app nav { display: grid; gap: 6px; }
+.nav-divider, .nav-logout { display: none; }
 .app nav button {
   border: 0;
   background: transparent;
@@ -221,6 +222,17 @@ header p,
   color: var(--heading);
   margin-top: 8px;
 }
+
+.stats-single {
+  grid-template-columns: 1fr !important;
+  max-width: 320px;
+}
+.card-danger {
+  background: var(--unavailable-bg);
+  border-color: var(--unavailable-border);
+}
+.card-danger span { color: var(--unavailable-text); opacity: .85; }
+.card-danger strong { color: var(--unavailable-text); font-size: 36px; }
 
 /* ===== Grid / split layouts ===== */
 .grid,
@@ -469,23 +481,32 @@ textarea {
     min-height: 44px;
     border-radius: 8px;
   }
-
-  /* Admin block: keep Log out reachable, just drop the label text */
-  .admin {
+  .nav-divider {
+    display: block;
+    height: 1px;
+    background: #31506d;
+    margin: 6px 4px;
+  }
+  .nav-logout {
     display: flex;
     align-items: center;
-    justify-content: flex-end;
-    border-top: none;
-    margin-top: 12px;
-    padding: 0;
-  }
-  .admin-label { display: none; }
-  .logout {
-    border: 1px solid #31506d;
-    border-radius: 8px;
-    padding: 10px 16px;
+    gap: 10px;
+    width: 100%;
+    text-align: left;
+    color: #fca5a5;
+    padding: 12px 14px;
     min-height: 44px;
+    border-radius: 8px;
+    background: transparent;
+    border: 0;
+    font: inherit;
+    cursor: pointer;
   }
+  .nav-logout:hover { background: var(--sidebar-hover); }
+  .nav-icon { font-size: 16px; line-height: 1; }
+
+  /* Logout now lives in the hamburger dropdown, so the old bottom bar is redundant on mobile */
+  .admin { display: none; }
 
   .app main {
     width: 100%;

@@ -70,6 +70,17 @@ export default function App() {
     else { setSortKey(key); setSortDir('asc') }
   }
 
+  // Dashboard headline stat: unique HODs whose unavailability window covers right now.
+  const unavailableTodayCount = (() => {
+    const now = new Date()
+    const ids = new Set(
+      records
+        .filter(r => r.status === 'UNAVAILABLE' && new Date(r.from) <= now && now <= new Date(r.to))
+        .map(r => r.hod)
+    )
+    return ids.size
+  })()
+
   // Dashboard list: apply HOD / reason / department filters, then sort.
   const dashboardRecords = records
     .filter(r => {
@@ -332,6 +343,13 @@ export default function App() {
               {n}
             </button>
           ))}
+          <div className="nav-divider" />
+          <button
+            className="nav-logout"
+            onClick={() => { localStorage.removeItem('hod_token'); setToken(''); setMobileNavOpen(false) }}
+          >
+            <span className="nav-icon" aria-hidden="true">🚪</span> Log out
+          </button>
         </nav>
         <div className="admin">
           <span className="admin-label">
@@ -371,11 +389,8 @@ export default function App() {
 
         {page === 'Dashboard' && (
           <>
-            <section className="stats">
-              <Card t="Total HODs" v={hods.length} />
-              <Card t="Departments" v={departments.length} />
-              <Card t="Unavailable records" v={records.filter(x => x.status === 'UNAVAILABLE').length} />
-              <Card t="Available records" v={records.filter(x => x.status === 'AVAILABLE').length} />
+            <section className="stats stats-single">
+              <Card t="Total unavailable today" v={unavailableTodayCount} tone="danger" />
             </section>
             <section className="grid">
               <Panel title="Current / scheduled unavailability">
@@ -748,9 +763,9 @@ function Login({ onLogin }) {
   )
 }
 
-function Card({ t, v }) {
+function Card({ t, v, tone }) {
   return (
-    <div className="card">
+    <div className={'card' + (tone ? ` card-${tone}` : '')}>
       <span>{t}</span>
       <strong>{v}</strong>
     </div>
