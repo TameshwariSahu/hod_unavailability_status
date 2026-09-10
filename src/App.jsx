@@ -29,7 +29,9 @@ export default function App() {
   const [records, setRecords] = useState(starterRecords)
   const [message, setMessage] = useState('')
   const [dept, setDept] = useState('')
+  const [editingDept, setEditingDept] = useState(null)
   const [hodForm, setHodForm] = useState({ sap: '', name: '', department: '' })
+  const [editingHod, setEditingHod] = useState(null)
   const [recordForm, setRecordForm] = useState(blank)
   const [token, setToken] = useState(localStorage.getItem('hod_token'))
   const [users, setUsers] = useState([])
@@ -191,31 +193,50 @@ export default function App() {
   useEffect(() => { if (token) loadData() }, [token])
   useEffect(() => { if (token && page === 'Users') loadUsers() }, [token, page])
 
-  const addDept = async e => {
+  const saveDept = async e => {
     e.preventDefault()
     if (!dept.trim()) return
     try {
-      await api.createDepartment(dept.trim())
+      if (editingDept) {
+        await api.updateDepartment(editingDept, dept.trim())
+        setMessage('Department updated.')
+      } else {
+        await api.createDepartment(dept.trim())
+        setMessage('Department saved.')
+      }
       setDept('')
+      setEditingDept(null)
       await loadData()
-      setMessage('Department saved.')
     } catch (err) {
       setMessage(err.message)
     }
   }
 
-  const addHod = async e => {
+  const startEditDept = x => { setEditingDept(x.id); setDept(x.name) }
+  const cancelEditDept = () => { setEditingDept(null); setDept('') }
+
+  const saveHod = async e => {
     e.preventDefault()
     if (!hodForm.sap || !hodForm.name || !hodForm.department) return
     try {
-      await api.createHod({ sap_id: hodForm.sap, name: hodForm.name, department_id: Number(hodForm.department) })
+      const payload = { sap_id: hodForm.sap, name: hodForm.name, department_id: Number(hodForm.department) }
+      if (editingHod) {
+        await api.updateHod(editingHod, payload)
+        setMessage('HOD member updated.')
+      } else {
+        await api.createHod(payload)
+        setMessage('HOD member saved.')
+      }
       setHodForm({ sap: '', name: '', department: '' })
+      setEditingHod(null)
       await loadData()
-      setMessage('HOD member saved.')
     } catch (err) {
       setMessage(err.message)
     }
   }
+
+  const startEditHod = h => { setEditingHod(h.id); setHodForm({ sap: h.sap, name: h.name, department: String(h.department) }) }
+  const cancelEditHod = () => { setEditingHod(null); setHodForm({ sap: '', name: '', department: '' }) }
 
   const addRecord = async e => {
     e.preventDefault()
@@ -291,9 +312,11 @@ export default function App() {
           ))}
         </nav>
         <div className="admin">
-          Administrator
-          <br />
-          <small>System Admin </small>
+          <span className="admin-label">
+            Administrator
+            <br />
+            <small>System Admin </small>
+          </span>
           <button className="logout" onClick={() => { localStorage.removeItem('hod_token'); setToken('') }}>
              Log out
           </button>
@@ -311,7 +334,8 @@ export default function App() {
               {theme === 'dark' ? '☀️' : '🌙'}
             </button>
             <button className="primary" onClick={() => setPage('Availability Status')}>
-              + Add status
+              <span className="btn-label-full">+ Add status</span>
+              <span className="btn-label-short">+ Add</span>
             </button>
           </div>
         </header>
@@ -368,19 +392,24 @@ export default function App() {
 
         {page === 'Department Master' && (
           <section className="split">
-            <Panel title="Add department">
-              <form onSubmit={addDept}>
+            <Panel title={editingDept ? 'Edit department' : 'Add department'}>
+              <form onSubmit={saveDept}>
                 <label>
                   Department name
                   <input required value={dept} onChange={e => setDept(e.target.value)} placeholder="e.g. Operations" />
                 </label>
-                <button className="primary">Save department</button>
+                <div className="form-actions">
+                  <button className="primary">{editingDept ? 'Update department' : 'Save department'}</button>
+                  {editingDept && (
+                    <button type="button" className="clear-btn" onClick={cancelEditDept}>Cancel</button>
+                  )}
+                </div>
               </form>
             </Panel>
             <Panel title="Departments">
               <table>
                 <thead>
-                  <tr><th>ID</th><th>Name</th><th>HOD count</th></tr>
+                  <tr><th>ID</th><th>Name</th><th>HOD count</th><th>Actions</th></tr>
                 </thead>
                 <tbody>
                   {departments.map(x => (
@@ -388,6 +417,9 @@ export default function App() {
                       <td>{x.id}</td>
                       <td>{x.name}</td>
                       <td>{hods.filter(h => h.department === x.id).length}</td>
+                      <td>
+                        <button type="button" className="edit-btn" onClick={() => startEditDept(x)}>Edit</button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -398,8 +430,8 @@ export default function App() {
 
         {page === 'HOD Master' && (
           <section className="split">
-            <Panel title="Add HOD member">
-              <form onSubmit={addHod}>
+            <Panel title={editingHod ? 'Edit HOD member' : 'Add HOD member'}>
+              <form onSubmit={saveHod}>
                 <label>
                   SAP ID <small>(exactly 8 digits)</small>
                   <input
@@ -425,13 +457,18 @@ export default function App() {
                     ))}
                   </select>
                 </label>
-                <button className="primary">Save HOD</button>
+                <div className="form-actions">
+                  <button className="primary">{editingHod ? 'Update HOD' : 'Save HOD'}</button>
+                  {editingHod && (
+                    <button type="button" className="clear-btn" onClick={cancelEditHod}>Cancel</button>
+                  )}
+                </div>
               </form>
             </Panel>
             <Panel title="HOD members">
               <table>
                 <thead>
-                  <tr><th>SAP ID</th><th>Name</th><th>Department</th></tr>
+                  <tr><th>SAP ID</th><th>Name</th><th>Department</th><th>Actions</th></tr>
                 </thead>
                 <tbody>
                   {hods.map(h => (
@@ -439,6 +476,9 @@ export default function App() {
                       <td>{h.sap}</td>
                       <td>{h.name}</td>
                       <td>{dname(h.department)}</td>
+                      <td>
+                        <button type="button" className="edit-btn" onClick={() => startEditHod(h)}>Edit</button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

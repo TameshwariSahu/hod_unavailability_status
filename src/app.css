@@ -256,6 +256,22 @@ header p,
   cursor: pointer;
 }
 .clear-btn:hover { background: var(--surface-2); }
+.edit-btn {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.edit-btn:hover { background: var(--surface-2); border-color: var(--accent); }
+.form-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
 .filter-count {
   margin-left: auto;
   font-size: 12.5px;
