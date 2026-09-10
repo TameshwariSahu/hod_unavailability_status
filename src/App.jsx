@@ -407,17 +407,16 @@ export default function App() {
               </form>
             </Panel>
             <Panel title="Departments">
-              <table>
+              <table className="responsive-table">
                 <thead>
-                  <tr><th>ID</th><th>Name</th><th>HOD count</th><th>Actions</th></tr>
+                  <tr><th>Name</th><th>HOD count</th><th>Actions</th></tr>
                 </thead>
                 <tbody>
                   {departments.map(x => (
                     <tr key={x.id}>
-                      <td>{x.id}</td>
-                      <td>{x.name}</td>
-                      <td>{hods.filter(h => h.department === x.id).length}</td>
-                      <td>
+                      <td data-label="Name">{x.name}</td>
+                      <td data-label="HOD count">{hods.filter(h => h.department === x.id).length}</td>
+                      <td data-label="Actions">
                         <button type="button" className="edit-btn" onClick={() => startEditDept(x)}>Edit</button>
                       </td>
                     </tr>
@@ -466,17 +465,17 @@ export default function App() {
               </form>
             </Panel>
             <Panel title="HOD members">
-              <table>
+              <table className="responsive-table">
                 <thead>
                   <tr><th>SAP ID</th><th>Name</th><th>Department</th><th>Actions</th></tr>
                 </thead>
                 <tbody>
                   {hods.map(h => (
                     <tr key={h.id}>
-                      <td>{h.sap}</td>
-                      <td>{h.name}</td>
-                      <td>{dname(h.department)}</td>
-                      <td>
+                      <td data-label="SAP ID">{h.sap}</td>
+                      <td data-label="Name">{h.name}</td>
+                      <td data-label="Department">{dname(h.department)}</td>
+                      <td data-label="Actions">
                         <button type="button" className="edit-btn" onClick={() => startEditHod(h)}>Edit</button>
                       </td>
                     </tr>
@@ -594,17 +593,17 @@ export default function App() {
               {users.length === 0
                 ? <p>No users found.</p>
                 : (
-                  <table>
+                  <table className="responsive-table">
                     <thead>
                       <tr><th>Username</th><th>Role</th><th>HOD</th><th>Status</th></tr>
                     </thead>
                     <tbody>
                       {users.map(u => (
                         <tr key={u.id}>
-                          <td>{u.username}</td>
-                          <td><em className={u.role === 'ADMIN' ? 'roleadmin' : 'rolehod'}>{u.role}</em></td>
-                          <td>{u.hodName || '—'}</td>
-                          <td><em className={u.isActive ? 'approved' : 'pending'}>{u.isActive ? 'Active' : 'Inactive'}</em></td>
+                          <td data-label="Username">{u.username}</td>
+                          <td data-label="Role"><em className={u.role === 'ADMIN' ? 'roleadmin' : 'rolehod'}>{u.role}</em></td>
+                          <td data-label="HOD">{u.hodName || '—'}</td>
+                          <td data-label="Status"><em className={u.isActive ? 'approved' : 'pending'}>{u.isActive ? 'Active' : 'Inactive'}</em></td>
                         </tr>
                       ))}
                     </tbody>
@@ -943,7 +942,7 @@ function Records({ records, hods, hname, dname, sortKey, sortDir, onSort, showSt
   )
   return (
     <div className="tablewrap">
-      <table>
+      <table className="responsive-table">
         <thead>
           <tr>
             <Th label="HOD" k="hod" />
@@ -960,11 +959,11 @@ function Records({ records, hods, hname, dname, sortKey, sortDir, onSort, showSt
                 const h = hods.find(x => x.id === r.hod)
                 return (
                   <tr key={r.id}>
-                    <td>{hname(r.hod)}</td>
-                    <td>{dname(h?.department)}</td>
-                    <td>{new Date(r.from).toLocaleDateString('en-IN')} – {new Date(r.to).toLocaleDateString('en-IN')}</td>
-                    <td>{r.reason === 'OTHER' && r.remarks ? r.remarks : r.reason}</td>
-                    {showStatus && <td><em className={r.status.toLowerCase()}>{r.status}</em></td>}
+                    <td data-label="HOD">{hname(r.hod)}</td>
+                    <td data-label="Department">{dname(h?.department)}</td>
+                    <td data-label="Period">{new Date(r.from).toLocaleDateString('en-IN')} – {new Date(r.to).toLocaleDateString('en-IN')}</td>
+                    <td data-label="Reason">{r.reason === 'OTHER' && r.remarks ? r.remarks : r.reason}</td>
+                    {showStatus && <td data-label="Status"><em className={r.status.toLowerCase()}>{r.status}</em></td>}
                   </tr>
                 )
               })}

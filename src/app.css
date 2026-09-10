@@ -155,6 +155,7 @@ header p,
   transition: background 0.15s;
 }
 .primary:hover { background: var(--accent-hover); }
+.btn-label-short { display: none; }
 
 /* ===== Notice / toast ===== */
 .notice {
@@ -401,24 +402,139 @@ textarea {
   .app { display: block; }
   .app aside {
     width: 100%;
-    padding: 16px;
+    padding: 14px 16px;
   }
-  .app aside > small,
-  .admin { display: none; }
+  .app aside > small { display: none; }
+
+  /* Nav becomes a horizontally-scrollable tab strip with real touch targets */
   .app nav {
     display: flex;
-    overflow: auto;
-    margin-top: 15px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin-top: 14px;
+    gap: 6px;
+    scrollbar-width: none;
   }
+  .app nav::-webkit-scrollbar { display: none; }
   .app nav button {
     white-space: nowrap;
-    padding: 8px;
+    padding: 11px 14px;
+    min-height: 44px;
+    border-radius: 8px;
   }
+
+  /* Admin block: keep Log out reachable, just drop the label text */
+  .admin {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    border-top: none;
+    margin-top: 12px;
+    padding: 0;
+  }
+  .admin-label { display: none; }
+  .logout {
+    border: 1px solid #31506d;
+    border-radius: 8px;
+    padding: 10px 16px;
+    min-height: 44px;
+  }
+
   .app main {
     width: 100%;
-    padding: 20px;
+    padding: 16px;
   }
+
+  /* Header: drop the description line, shrink title, let the add button shrink to an icon-ish label */
+  header { gap: 10px; margin-bottom: 18px; }
+  header p { display: none; }
+  h1 { font-size: 21px; }
+  .head-actions { gap: 8px; }
+  .theme-toggle { width: 40px; height: 40px; flex-shrink: 0; }
+  .primary { min-height: 40px; }
+  .btn-label-full { display: none; }
+  .btn-label-short { display: inline; }
+
+  .stats { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .card { padding: 14px; }
+  .card strong { font-size: 23px; }
+
+  .grid, .split { grid-template-columns: 1fr; }
   .two { grid-template-columns: 1fr; }
+
+  /* Forms: full-width, 16px inputs so iOS doesn't zoom in on focus */
+  input, select, textarea { font-size: 16px; }
+  .primary, .clear-btn, .edit-btn, .caltoday { width: 100%; text-align: center; }
+  .form-actions { flex-direction: column; align-items: stretch; }
+  .form-actions .primary, .form-actions .clear-btn { width: 100%; }
+
+  /* Filter bars: stack full-width instead of wrapping awkwardly */
+  .filterbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .filterbar select,
+  .date-field,
+  .filterbar .clear-btn {
+    width: 100%;
+    min-width: 0;
+  }
+  .date-field { justify-content: space-between; }
+  .date-field input { flex: 1; }
+  .filterbar-actions {
+    margin-left: 0;
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .filterbar-actions .filter-count { text-align: center; }
+  .filter-count { margin-left: 0; }
+  .primary.small { width: 100%; min-height: 40px; }
+
+  /* Data tables -> stacked cards. Scoped to .responsive-table only,
+     so the calendar grid (.caltable) is never affected. */
+  .responsive-table thead { display: none; }
+  .responsive-table, .responsive-table tbody, .responsive-table tr, .responsive-table td {
+    display: block;
+    width: 100%;
+  }
+  .responsive-table tr {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 4px 14px;
+    margin-bottom: 10px;
+  }
+  .responsive-table td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border-soft);
+    white-space: normal;
+    text-align: right;
+  }
+  .responsive-table td:last-child { border-bottom: 0; }
+  .responsive-table td::before {
+    content: attr(data-label);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    color: var(--muted);
+    text-align: left;
+    flex-shrink: 0;
+  }
+  .responsive-table td.empty {
+    text-align: center;
+    display: block;
+  }
+  .responsive-table td.empty::before { content: none; }
+
+  .pagination { flex-wrap: wrap; gap: 10px; }
+  .page-info { width: 100%; text-align: center; order: 3; }
+
   .calhead { flex-direction: column; align-items: flex-start; }
   .caltable thead th { font-size: 10px; }
   .caltable tbody td { height: 60px; }
@@ -433,6 +549,10 @@ textarea {
   .calflag { font-size: 9px; padding: 2px 6px; margin-top: 4px; }
   .coldetail-item { flex-direction: column; align-items: flex-start; gap: 6px; }
   .coldetail-meta { text-align: left; }
+}
+
+@media (max-width: 400px) {
+  .stats { grid-template-columns: 1fr; }
 }
 
 /* ===== Calendar ===== */
