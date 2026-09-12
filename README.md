@@ -1,5 +1,4 @@
-# HOD Availability Management System
-
+# HOD Unavailability Status
 A React, Express, and PostgreSQL application for tracking HOD availability and internal scheduled meetings.
 
 ## Features
