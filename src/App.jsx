@@ -20,6 +20,7 @@ const starterRecords = [
   { id: 2, hod: 2, reason: 'MEDICAL', from: '2026-09-08T09:00', to: '2026-09-09T18:00', alternate: '', status: 'UNAVAILABLE' },
 ]
 const blank = { hod: '', reason: 'MEETING', from: '', to: '', alternate: '', remarks: '' }
+const blankMeeting = { title: '', date: '', startTime: '', endTime: '', details: '' }
 const reasonOptions = ['LEAVE', 'MEDICAL', 'MEETING', 'OTHER', 'OUT OF STATION']
 
 export default function App() {
@@ -33,6 +34,9 @@ export default function App() {
   const [hodForm, setHodForm] = useState({ sap: '', name: '', department: '' })
   const [editingHod, setEditingHod] = useState(null)
   const [recordForm, setRecordForm] = useState(blank)
+  const [meetings, setMeetings] = useState([])
+  const [meetingForm, setMeetingForm] = useState(blankMeeting)
+  const [editingMeeting, setEditingMeeting] = useState(null)
   const [token, setToken] = useState(localStorage.getItem('hod_token'))
   const [users, setUsers] = useState([])
   const [pwForm, setPwForm] = useState({ user: '', password: '', confirm: '' })
@@ -208,8 +212,9 @@ export default function App() {
     }
   }
 
-  useEffect(() => { if (token) loadData() }, [token])
+  useEffect(() => { loadData() }, [token])
   useEffect(() => { if (token && page === 'Users') loadUsers() }, [token, page])
+  useEffect(() => { if (page === 'Scheduled Meetings') loadMeetings() }, [page])
 
   const saveDept = async e => {
     e.preventDefault()
@@ -282,6 +287,91 @@ export default function App() {
     }
   }
 
+  const loadMeetings = async () => {
+    try {
+      const rows = await api.scheduledMeetings()
+      setMeetings(rows.map(x => ({
+        id: Number(x.id),
+        title: x.title,
+        details: x.details || '',
+        date: x.meeting_date,
+        startTime: x.start_time.slice(0, 5),
+        endTime: x.end_time.slice(0, 5),
+        status: x.status,
+      })))
+    } catch (err) {
+      setMessage(err.message)
+    }
+  }
+
+  const saveMeeting = async e => {
+    e.preventDefault()
+    if (!meetingForm.title.trim() || !meetingForm.date || !meetingForm.startTime || !meetingForm.endTime) return
+    if (meetingForm.endTime <= meetingForm.startTime) {
+      setMessage('Meeting end time must be after the start time.')
+      return
+    }
+    const payload = {
+      title: meetingForm.title.trim(),
+      details: meetingForm.details.trim(),
+      meeting_date: meetingForm.date,
+      start_time: meetingForm.startTime,
+      end_time: meetingForm.endTime,
+    }
+    try {
+      if (editingMeeting) {
+        await api.updateScheduledMeeting(editingMeeting, payload)
+        setMessage('Scheduled meeting updated.')
+      } else {
+        await api.createScheduledMeeting(payload)
+        setMessage('Scheduled meeting saved.')
+      }
+      setMeetingForm(blankMeeting)
+      setEditingMeeting(null)
+      await loadMeetings()
+    } catch (err) {
+      setMessage(err.message)
+    }
+  }
+
+  const startEditMeeting = meeting => {
+    if (!token) {
+      setMessage('Sign in to edit a scheduled meeting.')
+      setPage('Sign in')
+      return
+    }
+    setEditingMeeting(meeting.id)
+    setMeetingForm({
+      title: meeting.title,
+      date: meeting.date,
+      startTime: meeting.startTime,
+      endTime: meeting.endTime,
+      details: meeting.details,
+    })
+  }
+
+  const cancelEditMeeting = () => {
+    setEditingMeeting(null)
+    setMeetingForm(blankMeeting)
+  }
+
+  const cancelMeeting = async meeting => {
+    if (!token) {
+      setMessage('Sign in to cancel a scheduled meeting.')
+      setPage('Sign in')
+      return
+    }
+    if (!window.confirm(`Cancel “${meeting.title}”?`)) return
+    try {
+      await api.cancelScheduledMeeting(meeting.id)
+      if (editingMeeting === meeting.id) cancelEditMeeting()
+      await loadMeetings()
+      setMessage('Meeting cancelled.')
+    } catch (err) {
+      setMessage(err.message)
+    }
+  }
+
   const loadUsers = async () => {
     try {
       setUsers((await api.users()).map(x => ({
@@ -311,10 +401,19 @@ export default function App() {
     }
   }
 
-  const nav = ['Dashboard', 'Department Master', 'HOD Master', 'Availability Status', 'Calendar', 'Users', 'Reports']
+  const nav = token
+    ? ['Dashboard', 'Department Master', 'HOD Master', 'Availability Status', 'Calendar', 'Scheduled Meetings', 'Users', 'Reports']
+    : ['Dashboard', 'Calendar', 'Scheduled Meetings', 'Sign in']
 
-  if (!token) {
-    return <Login onLogin={data => { localStorage.setItem('hod_token', data.token); setToken(data.token) }} />
+  if (page === 'Sign in') {
+    return <Login
+      onLogin={data => {
+        localStorage.setItem('hod_token', data.token)
+        setToken(data.token)
+        setPage('Scheduled Meetings')
+      }}
+      onBack={() => setPage('Dashboard')}
+    />
   }
 
   return (
@@ -344,23 +443,28 @@ export default function App() {
             </button>
           ))}
           <div className="nav-divider" />
-          <button
-            className="nav-logout"
-            onClick={() => { localStorage.removeItem('hod_token'); setToken(''); setMobileNavOpen(false) }}
-          >
-            <span className="nav-icon" aria-hidden="true">🚪</span> Log out
-          </button>
+
+
+          {token ? (
+            <button
+              className="nav-logout"
+              onClick={() => { localStorage.removeItem('hod_token'); setToken(''); setPage('Dashboard'); setMobileNavOpen(false) }}
+            >
+              <span className="nav-icon" aria-hidden="true">🚪</span> Log out
+            </button>
+          ) : <></>}
         </nav>
-        <div className="admin">
+        
+        {token && <div className="admin">
           <span className="admin-label">
             Administrator
             <br />
             <small>System Admin </small>
           </span>
-          <button className="logout" onClick={() => { localStorage.removeItem('hod_token'); setToken('') }}>
+          <button className="logout" onClick={() => { localStorage.removeItem('hod_token'); setToken(''); setPage('Dashboard') }}>
              Log out
           </button>
-        </div>
+        </div>}
       </aside>
 
       <main>
@@ -373,8 +477,8 @@ export default function App() {
             <button className="theme-toggle" onClick={toggleTheme} aria-label="Toggle dark mode" title="Toggle dark mode">
               {theme === 'dark' ? '☀️' : '🌙'}
             </button>
-            <button className="primary" onClick={() => setPage('Availability Status')}>
-              <span className="btn-label-full">+ Add status</span>
+            <button className="primary" onClick={() => setPage(token && page !== 'Scheduled Meetings' ? 'Availability Status' : 'Scheduled Meetings')}>
+              <span className="btn-label-full">{page === 'Scheduled Meetings' ? '+ Schedule meeting' : token ? '+ Add status' : '+ Schedule meeting'}</span>
               <span className="btn-label-short">+ Add</span>
             </button>
           </div>
@@ -588,6 +692,69 @@ export default function App() {
           <Calendar records={records} hods={hods} hname={hname} dname={dname} />
         )}
 
+        {page === 'Scheduled Meetings' && (
+          <>
+            <section className="split scheduled-meetings-layout">
+              <Panel title={editingMeeting ? 'Edit scheduled meeting' : 'Schedule a meeting'}>
+                <form onSubmit={saveMeeting}>
+                  <label>
+                    Meeting title
+                    <input required value={meetingForm.title} onChange={e => setMeetingForm({ ...meetingForm, title: e.target.value })} />
+                  </label>
+                  <div className="two">
+                    <label>
+                      Date
+                      <input required type="date" value={meetingForm.date} onChange={e => setMeetingForm({ ...meetingForm, date: e.target.value })} />
+                    </label>
+                    <label>
+                      Start time
+                      <input required type="time" value={meetingForm.startTime} onChange={e => setMeetingForm({ ...meetingForm, startTime: e.target.value })} />
+                    </label>
+                  </div>
+                  <label>
+                    End time
+                    <input required type="time" value={meetingForm.endTime} onChange={e => setMeetingForm({ ...meetingForm, endTime: e.target.value })} />
+                  </label>
+                  <label>
+                    Details
+                    <textarea value={meetingForm.details} onChange={e => setMeetingForm({ ...meetingForm, details: e.target.value })} />
+                  </label>
+                  <div className="form-actions">
+                    <button className="primary">{editingMeeting ? 'Update meeting' : 'Schedule meeting'}</button>
+                    {editingMeeting && <button type="button" className="clear-btn" onClick={cancelEditMeeting}>Cancel edit</button>}
+                  </div>
+                </form>
+              </Panel>
+              <Panel title="Scheduled meetings">
+                <table className="responsive-table">
+                  <thead>
+                    <tr><th>Meeting</th><th>Date</th><th>Time</th><th>Details</th><th>Status</th><th>Actions</th></tr>
+                  </thead>
+                  <tbody>
+                    {meetings.length === 0 ? (
+                      <tr><td className="empty" colSpan="6">No scheduled meetings.</td></tr>
+                    ) : meetings.map(meeting => (
+                      <tr key={meeting.id} className={meeting.status === 'CANCELLED' ? 'cancelled-meeting' : ''}>
+                        <td data-label="Meeting">{meeting.title}</td>
+                        <td data-label="Date">{new Date(`${meeting.date}T00:00:00`).toLocaleDateString('en-IN')}</td>
+                        <td data-label="Time">{meeting.startTime} - {meeting.endTime}</td>
+                        <td data-label="Details" className="meeting-details">{meeting.details || '—'}</td>
+                        <td data-label="Status"><em className={meeting.status === 'CANCELLED' ? 'cancelled' : 'approved'}>{meeting.status === 'CANCELLED' ? 'Cancelled' : 'Scheduled'}</em></td>
+                        <td data-label="Actions" className="meeting-actions">
+                          {meeting.status === 'SCHEDULED'
+                            ? <><button type="button" className="edit-btn" onClick={() => startEditMeeting(meeting)}>Edit</button><button type="button" className="clear-btn" onClick={() => cancelMeeting(meeting)}>Cancel</button></>
+                            : <span className="cancelled-label">Cancelled</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </Panel>
+            </section>
+            <MeetingCalendar meetings={meetings} onEdit={startEditMeeting} onCancel={cancelMeeting} />
+          </>
+        )}
+
         {page === 'Users' && (
           <section className="split">
             <Panel title="Set user password">
@@ -707,7 +874,7 @@ export default function App() {
   )
 }
 
-function Login({ onLogin }) {
+function Login({ onLogin, onBack }) {
   const [mode, setMode] = useState('login')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -758,6 +925,7 @@ function Login({ onLogin }) {
         <button type="button" className="link" onClick={() => setMode(mode === 'setup' ? 'login' : 'setup')}>
           {mode === 'setup' ? 'Already have an account? Sign in' : 'First-time setup? Create admin'}
         </button>
+        {onBack && <button type="button" className="link login-back" onClick={onBack}>Back to dashboard</button>}
       </form>
     </div>
   )
@@ -962,6 +1130,118 @@ function Calendar({ records, hods, hname, dname }) {
           </div>
         )
       })()}
+    </section>
+  )
+}
+
+function MeetingCalendar({ meetings, onEdit, onCancel }) {
+  const [cursor, setCursor] = useState(() => { const now = new Date(); return { y: now.getFullYear(), m: now.getMonth() } })
+  const [selectedDay, setSelectedDay] = useState(null)
+  const today = new Date()
+  const dayMap = {}
+
+  meetings.forEach(meeting => {
+    const date = new Date(`${meeting.date}T00:00:00`)
+    if (date.getFullYear() !== cursor.y || date.getMonth() !== cursor.m) return
+    const key = date.getDate()
+    ;(dayMap[key] = dayMap[key] || []).push(meeting)
+  })
+
+  const firstWeekday = new Date(cursor.y, cursor.m, 1).getDay()
+  const daysInMonth = new Date(cursor.y, cursor.m + 1, 0).getDate()
+  const weeks = []
+  let week = Array(firstWeekday).fill(null)
+  for (let day = 1; day <= daysInMonth; day++) {
+    week.push({ day, meetings: dayMap[day] || [], isToday: today.getFullYear() === cursor.y && today.getMonth() === cursor.m && today.getDate() === day })
+    if (week.length === 7) { weeks.push(week); week = [] }
+  }
+  if (week.length) weeks.push([...week, ...Array(7 - week.length).fill(null)])
+
+  const move = delta => {
+    const date = new Date(cursor.y, cursor.m + delta, 1)
+    setCursor({ y: date.getFullYear(), m: date.getMonth() })
+    setSelectedDay(null)
+  }
+  const jumpTo = (y, m) => { setCursor({ y, m }); setSelectedDay(null) }
+  const monthOptions = Array.from({ length: 12 }, (_, i) => ({ value: String(i), label: new Date(2000, i, 1).toLocaleString('en-IN', { month: 'long' }) }))
+  const yearOptions = Array.from({ length: 7 }, (_, i) => today.getFullYear() - 3 + i)
+  const isCurrentMonth = cursor.y === today.getFullYear() && cursor.m === today.getMonth()
+  const selectedMeetings = selectedDay ? dayMap[selectedDay] || [] : []
+
+  return (
+    <section className="panel calendar meeting-calendar">
+      <div className="calhead">
+        <div className="caltabs">
+          <button className="calnav" onClick={() => move(-1)} aria-label="Previous month">‹</button>
+          <div className="calselects">
+            <select className="calmonth" value={String(cursor.m)} onChange={e => jumpTo(cursor.y, Number(e.target.value))} aria-label="Select month">
+              {monthOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+            <select className="calyear" value={String(cursor.y)} onChange={e => jumpTo(Number(e.target.value), cursor.m)} aria-label="Select year">
+              {yearOptions.map(year => <option key={year} value={year}>{year}</option>)}
+            </select>
+          </div>
+          <button className="calnav" onClick={() => move(1)} aria-label="Next month">›</button>
+          <button className="caltoday" disabled={isCurrentMonth} onClick={() => jumpTo(today.getFullYear(), today.getMonth())}>Today</button>
+        </div>
+        <div className="callegend">
+          <span className="calkey meeting"><i /> Scheduled meeting</span>
+          <span className="calkey today"><i /> Today</span>
+        </div>
+      </div>
+      <p className="calhint">Green days contain internal scheduled meetings. Select a day to view its timings, edit a record, or cancel it.</p>
+      <div className="tablewrap">
+        <table className="caltable">
+          <thead><tr>{['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => <th key={day}>{day}</th>)}</tr></thead>
+          <tbody>
+            {weeks.map((row, rowIndex) => <tr key={rowIndex}>
+              {row.map((cell, cellIndex) => {
+                const interactive = cell && cell.meetings.length > 0
+                const hasScheduledMeeting = cell?.meetings.some(meeting => meeting.status === 'SCHEDULED')
+                return (
+                  <td
+                    key={cellIndex}
+                    className={cell ? `calcell${cell.meetings.length ? ' meeting' : ''}${hasScheduledMeeting ? '' : ' cancelled-day'}${cell.isToday ? ' today' : ''}${selectedDay === cell.day ? ' selected' : ''}` : 'calblank'}
+                    onClick={interactive ? () => setSelectedDay(selectedDay === cell.day ? null : cell.day) : undefined}
+                    onKeyDown={interactive ? event => {
+                      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedDay(selectedDay === cell.day ? null : cell.day) }
+                    } : undefined}
+                    tabIndex={interactive ? 0 : undefined}
+                    role={interactive ? 'button' : undefined}
+                    aria-label={interactive ? `${cell.meetings.length} scheduled meeting${cell.meetings.length === 1 ? '' : 's'} on day ${cell.day}` : undefined}
+                  >
+                    {cell && <span className="calnum">{cell.day}</span>}
+                    {cell && cell.meetings.slice(0, 2).map(meeting => <span className={`calflag meeting${meeting.status === 'CANCELLED' ? ' cancelled' : ''}`} key={meeting.id}>{meeting.startTime} {meeting.title}</span>)}
+                    {cell && cell.meetings.length > 2 && <span className="calmore">+{cell.meetings.length - 2} more</span>}
+                  </td>
+                )
+              })}
+            </tr>)}
+          </tbody>
+        </table>
+      </div>
+      {selectedDay && selectedMeetings.length > 0 && (
+        <div className="coldetail meeting-detail">
+          <div className="coldetail-head">
+            <b>{new Date(cursor.y, cursor.m, selectedDay).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })} - {selectedMeetings.length} scheduled meeting{selectedMeetings.length === 1 ? '' : 's'}</b>
+            <button type="button" className="close" onClick={() => setSelectedDay(null)} aria-label="Close">×</button>
+          </div>
+          {selectedMeetings.map(meeting => (
+            <div key={meeting.id} className={`coldetail-item${meeting.status === 'CANCELLED' ? ' cancelled-meeting' : ''}`}>
+              <div className="coldetail-main">
+                <strong>{meeting.title}</strong>
+                <span>{meeting.startTime} - {meeting.endTime}</span>
+                {meeting.details && <div className="calalt">{meeting.details}</div>}
+              </div>
+              <div className="meeting-actions">
+                {meeting.status === 'SCHEDULED'
+                  ? <><button type="button" className="edit-btn" onClick={() => onEdit(meeting)}>Edit</button><button type="button" className="clear-btn" onClick={() => onCancel(meeting)}>Cancel</button></>
+                  : <span className="cancelled-label">Cancelled</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   )
 }

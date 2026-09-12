@@ -53,6 +53,25 @@ CREATE TABLE hod_availability_status (
 CREATE INDEX idx_hod_status_period ON hod_availability_status (from_datetime, to_datetime);
 CREATE INDEX idx_hod_status_hod ON hod_availability_status (hod_id);
 
+-- Internal meetings are deliberately independent of availability status records.
+CREATE TABLE scheduled_meetings (
+  id BIGSERIAL PRIMARY KEY,
+  title VARCHAR(200) NOT NULL,
+  details TEXT,
+  meeting_date DATE NOT NULL,
+  start_time TIME NOT NULL,
+  end_time TIME NOT NULL,
+  status VARCHAR(12) NOT NULL DEFAULT 'SCHEDULED' CHECK (status IN ('SCHEDULED', 'CANCELLED')),
+  created_by BIGINT REFERENCES users(id),
+  cancelled_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CHECK (end_time > start_time)
+);
+
+CREATE INDEX idx_scheduled_meetings_calendar ON scheduled_meetings (meeting_date, start_time)
+  WHERE status = 'SCHEDULED';
+
 -- One HOD cannot have overlapping active availability/meeting records.
 -- [) means an entry ending at 11:00 and another starting at 11:00 are allowed.
 CREATE EXTENSION IF NOT EXISTS btree_gist;

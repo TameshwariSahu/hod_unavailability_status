@@ -20,6 +20,18 @@ const allowedReasons = [
 ];
 const clean = value => typeof value === 'string' ? value.trim() : ''
 const validDateRange = (from, to) => !Number.isNaN(Date.parse(from)) && !Number.isNaN(Date.parse(to)) && new Date(to) > new Date(from)
+const meetingPayload = body => {
+  const title = clean(body.title)
+  const details = clean(body.details)
+  const meetingDate = clean(body.meeting_date)
+  const startTime = clean(body.start_time)
+  const endTime = clean(body.end_time)
+  const validDate = /^\d{4}-\d{2}-\d{2}$/.test(meetingDate) && !Number.isNaN(Date.parse(`${meetingDate}T00:00:00`))
+  const validTime = /^\d{2}:\d{2}(:\d{2})?$/.test(startTime) && /^\d{2}:\d{2}(:\d{2})?$/.test(endTime)
+
+  if (!title || title.length > 200 || !validDate || !validTime || endTime <= startTime) return null
+  return { title, details, meetingDate, startTime, endTime }
+}
 
 app.get('/api/health', asyncRoute(async (_,res) => { await pool.query('SELECT 1'); res.json({ status: 'ok' }) }))
 
@@ -42,12 +54,64 @@ app.post('/api/auth/login', asyncRoute(async (req,res) => {
   res.json({ token, user:{ id:user.id,username:user.username,role:user.role } })
 }))
 
-app.get('/api/departments', requireAuth, asyncRoute(async (_,res) => res.json((await pool.query('SELECT * FROM departments ORDER BY department_name')).rows)))
+app.get('/api/departments', asyncRoute(async (_,res) => res.json((await pool.query('SELECT * FROM departments ORDER BY department_name')).rows)))
 app.post('/api/departments', requireAuth, requireAdmin, asyncRoute(async (req,res) => { const name=clean(req.body.department_name); if(!name || name.length>150)return res.status(400).json({message:'Department name is required and must be 150 characters or fewer.'}); const r=await pool.query('INSERT INTO departments (department_name) VALUES ($1) RETURNING *',[name]);res.status(201).json(r.rows[0]) }))
-app.get('/api/hods', requireAuth, asyncRoute(async (_,res) => res.json((await pool.query('SELECT h.*,d.department_name FROM hod_members h JOIN departments d ON d.id=h.department_id ORDER BY h.name')).rows)))
+app.get('/api/hods', asyncRoute(async (_,res) => res.json((await pool.query('SELECT h.*,d.department_name FROM hod_members h JOIN departments d ON d.id=h.department_id ORDER BY h.name')).rows)))
 app.post('/api/hods', requireAuth, requireAdmin, asyncRoute(async (req,res) => { const sapId=clean(req.body.sap_id), name=clean(req.body.name), {department_id}=req.body, email=clean(req.body.email), phone=clean(req.body.phone); if(!/^\d{8}$/.test(sapId))return res.status(400).json({message:'SAP ID must contain exactly 8 digits.'}); if(!name||!Number.isInteger(Number(department_id)))return res.status(400).json({message:'HOD name and a valid department are required.'}); if(name.length>150||email.length>150||phone.length>20)return res.status(400).json({message:'One or more fields are too long.'}); if(email&&!/^\S+@\S+\.\S+$/.test(email))return res.status(400).json({message:'Enter a valid email address.'}); const r=await pool.query('INSERT INTO hod_members (sap_id,name,department_id,email,phone) VALUES ($1,$2,$3,$4,$5) RETURNING *',[sapId,name,department_id,email||null,phone||null]);res.status(201).json(r.rows[0]) }))
-app.get('/api/availability-status', requireAuth, asyncRoute(async (_,res) => res.json((await pool.query(`SELECT s.*,h.name AS hod_name,d.department_name,a.name AS alternate_hod_name FROM hod_availability_status s JOIN hod_members h ON h.id=s.hod_id JOIN departments d ON d.id=h.department_id LEFT JOIN hod_members a ON a.id=s.alternate_hod_id ORDER BY s.from_datetime DESC`)).rows)))
+app.get('/api/availability-status', asyncRoute(async (_,res) => res.json((await pool.query(`SELECT s.*,h.name AS hod_name,d.department_name,a.name AS alternate_hod_name FROM hod_availability_status s JOIN hod_members h ON h.id=s.hod_id JOIN departments d ON d.id=h.department_id LEFT JOIN hod_members a ON a.id=s.alternate_hod_id ORDER BY s.from_datetime DESC`)).rows)))
 app.post('/api/availability-status', requireAuth, asyncRoute(async (req,res) => { const {hod_id,availability_status='UNAVAILABLE',reason,from_datetime,to_datetime,alternate_hod_id}=req.body, remarks=clean(req.body.remarks); if(!Number.isInteger(Number(hod_id))||!['AVAILABLE','UNAVAILABLE'].includes(availability_status)||!allowedReasons.includes(reason)||!validDateRange(from_datetime,to_datetime))return res.status(400).json({message:'Enter a valid HOD, availability status, reason, and date/time range.'}); if(alternate_hod_id&&(!Number.isInteger(Number(alternate_hod_id))||Number(alternate_hod_id)===Number(hod_id)))return res.status(400).json({message:'Alternate HOD must be another HOD.'}); const overlap=await pool.query(`SELECT id FROM hod_availability_status WHERE hod_id=$1 AND approval_status <> 'CANCELLED' AND tstzrange(from_datetime,to_datetime,'[)') && tstzrange($2::timestamptz,$3::timestamptz,'[)') LIMIT 1`,[hod_id,from_datetime,to_datetime]); if(overlap.rowCount)return res.status(409).json({message:'This HOD already has an availability status record during the selected date and time.'}); const r=await pool.query('INSERT INTO hod_availability_status (hod_id,availability_status,reason,from_datetime,to_datetime,remarks,alternate_hod_id,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *',[hod_id,availability_status,reason,from_datetime,to_datetime,remarks||null,alternate_hod_id||null,req.user.id]);res.status(201).json(r.rows[0]) }))
+
+app.get('/api/scheduled-meetings', asyncRoute(async (_, res) => {
+  const result = await pool.query(`
+    SELECT id, title, details, meeting_date::text AS meeting_date,
+           to_char(start_time, 'HH24:MI') AS start_time,
+           to_char(end_time, 'HH24:MI') AS end_time, status
+    FROM scheduled_meetings
+    ORDER BY meeting_date, start_time
+  `)
+  res.json(result.rows)
+}))
+
+app.post('/api/scheduled-meetings', asyncRoute(async (req, res) => {
+  const meeting = meetingPayload(req.body)
+  if (!meeting) return res.status(400).json({ message: 'Enter a title, valid date, and an end time after the start time.' })
+  const result = await pool.query(`
+    INSERT INTO scheduled_meetings (title, details, meeting_date, start_time, end_time, created_by)
+    VALUES ($1, $2, $3, $4, $5, $6)
+    RETURNING id, title, details, meeting_date::text AS meeting_date,
+              to_char(start_time, 'HH24:MI') AS start_time, to_char(end_time, 'HH24:MI') AS end_time, status
+  `, [meeting.title, meeting.details || null, meeting.meetingDate, meeting.startTime, meeting.endTime, null])
+  res.status(201).json(result.rows[0])
+}))
+
+app.put('/api/scheduled-meetings/:id', requireAuth, asyncRoute(async (req, res) => {
+  const id = Number(req.params.id)
+  const meeting = meetingPayload(req.body)
+  if (!Number.isInteger(id)) return res.status(400).json({ message: 'Invalid meeting.' })
+  if (!meeting) return res.status(400).json({ message: 'Enter a title, valid date, and an end time after the start time.' })
+  const result = await pool.query(`
+    UPDATE scheduled_meetings
+    SET title = $1, details = $2, meeting_date = $3, start_time = $4, end_time = $5, updated_at = CURRENT_TIMESTAMP
+    WHERE id = $6 AND status = 'SCHEDULED'
+    RETURNING id, title, details, meeting_date::text AS meeting_date,
+              to_char(start_time, 'HH24:MI') AS start_time, to_char(end_time, 'HH24:MI') AS end_time, status
+  `, [meeting.title, meeting.details || null, meeting.meetingDate, meeting.startTime, meeting.endTime, id])
+  if (!result.rowCount) return res.status(404).json({ message: 'Scheduled meeting not found.' })
+  res.json(result.rows[0])
+}))
+
+app.delete('/api/scheduled-meetings/:id', requireAuth, asyncRoute(async (req, res) => {
+  const id = Number(req.params.id)
+  if (!Number.isInteger(id)) return res.status(400).json({ message: 'Invalid meeting.' })
+  const result = await pool.query(`
+    UPDATE scheduled_meetings
+    SET status = 'CANCELLED', cancelled_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+    WHERE id = $1 AND status = 'SCHEDULED'
+    RETURNING id
+  `, [id])
+  if (!result.rowCount) return res.status(404).json({ message: 'Scheduled meeting not found.' })
+  res.json({ message: 'Meeting cancelled.' })
+}))
 
 // List all users so an administrator can pick one to manage.
 app.get('/api/users', requireAuth, requireAdmin, asyncRoute(async (_,res) => {

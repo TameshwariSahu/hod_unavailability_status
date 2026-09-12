@@ -56,6 +56,20 @@ export const api = {
     body: JSON.stringify(data),
   }),
 
+  // Internal scheduled meetings
+  scheduledMeetings: () => request('/scheduled-meetings'),
+  createScheduledMeeting: (data) => request('/scheduled-meetings', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
+  updateScheduledMeeting: (id, data) => request(`/scheduled-meetings/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  }),
+  cancelScheduledMeeting: (id) => request(`/scheduled-meetings/${id}`, {
+    method: 'DELETE',
+  }),
+
   // Users (admin)
   users: () => request('/users'),
   setPassword: (id, password) => request(`/users/${id}/password`, {
